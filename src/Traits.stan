@@ -12,8 +12,8 @@ model {
   vector[n] mu;
  
   //Priors
-  beta ~ normal(0.01, 100000);
-  sigma ~ uniform(0,100);
+  beta ~ normal(0, 10);
+  sigma ~ normal(0,100);
  
   //Likelihood
   mu = M * beta;
