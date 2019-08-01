@@ -5,33 +5,17 @@
 ### To do : Select out means of interest 
 ### To do : Model variance components as well as means 
 
-Trait2017_data<-read.csv(file.choose())
+library(R2jags)
+
+Trait2017_data<-read.csv("data/HECO_ELTR_PLPA_VUOC.csv")
+
+jags_model = "src/SLA.txt"
 HECO_data<-Trait2017_data[Trait2017_data$SPECIES=="HECO",]
 
 HECO_SLA<-subset(HECO_data, select=c("POP_ID", "H_num","SLA.TOT"))
 n=length(HECO_SLA)
 M <- model.matrix(~POP_ID * H_num, data = HECO_SLA)
  
-modelString="
-model {
-
-# Likelihood
- for (i in 1:n) {
- y[i]~dnorm(mean[i],tau)
- mean[i] <- inprod(beta[],M[i,])
- }
-# Priors and derivatives
- for (i in 1:p) {
- beta[i] ~ dnorm(0, 1.0E-6) #prior
- }
- sigma ~ dgamma(0.001, 0.001)
- tau <- 1 / (sigma * sigma)
- }
- "
-writeLines(modelString,con="SLA.txt")
-
-
-M <- model.matrix(~POP_ID * H_num, data = HECO_SLA)
 data.list <- with(HECO_SLA,
                     list(y=SLA.TOT,
                     M=M,
@@ -46,8 +30,6 @@ numSavedSteps = 5000
 thinSteps = 10
 nIter = ceiling((numSavedSteps * thinSteps)/nChains)
 
-
-library(R2jags)
 jags.effects.simple.time <- system.time(
   data.r2jags <- jags(data=data.list,
                       inits=NULL,
@@ -76,47 +58,32 @@ print(data.r2jags)
 #
 #
 #
+mod = stan_model("src/Traits.stan")
 
-rstanString="
-data {
-int<lower=0> n;
-int<lower=0> p;
-vector[n] y;
-matrix [n,p] M;
-}
- parameters {
- vector[p] beta;
- real<lower=0> sigma;
- }
- model {
- vector[n] mu;
- 
- #Priors
- beta ~ normal(0.01, 100000);
- sigma ~ uniform(0,100);
- 
- #Likelihood
- mu <- M*beta;
- y ~ normal(mu, sigma);
- }
- "
- M <- model.matrix(~POP_ID * H_num, data = HECO_SLA)
- data.list <- list(y = HECO_SLA$SLA.TOT, M = M, n = nrow(HECO_SLA), p = ncol(M))
+M <- model.matrix(~POP_ID * H_num, data = HECO_SLA)
+
+## Stan does not handle NAs
+
+missingY = is.na(HECO_SLA$SLA.TOT)
+
+## Remove NAs
+M = M[!missingY,]
+y = HECO_SLA$SLA.TOT[!missingY]
+
+data.list <- list(y = y,
+                  M = M,
+                  n = nrow(M),
+                  p = ncol(M))
   
-nChains = 3
-burnInSteps = 3000
-thinSteps = 10
-numSavedSteps = 15000 #across all chains
-nIter = ceiling(burnInSteps+(numSavedSteps * thinSteps)/nChains)
+# don't do this
+## nChains = 3
+## burnInSteps = 3000
+## thinSteps = 10
+## numSavedSteps = 15000 #across all chains
+## nIter = ceiling(burnInSteps+(numSavedSteps * thinSteps)/nChains)
     
 library(rstan)
 rstan.simple.time <- system.time(
-data.rstan <- stan(data=data.list,
-                   model_code=rstanString,
-                   chains=nChains,
-                   iter=nIter,
-                   warmup=burnInSteps,
-                   thin=thinSteps,
-                   save_dso=TRUE))
+    data.rstan <- sampling(mod, data=data.list))
 
 
