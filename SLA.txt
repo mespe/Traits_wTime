@@ -1,0 +1,16 @@
+
+model {
+
+# Likelihood
+ for (i in 1:n) {
+ y[i]~dnorm(mean[i],tau)
+ mean[i] <- inprod(beta[],M[i,])
+ }
+# Priors and derivatives
+ for (i in 1:p) {
+ beta[i] ~ dnorm(0, 1.0E-6) #prior
+ }
+ sigma ~ dgamma(0.001, 0.001)
+ tau <- 1 / (sigma * sigma)
+ }
+ 
